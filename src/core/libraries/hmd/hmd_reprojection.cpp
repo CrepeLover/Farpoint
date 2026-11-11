@@ -5,6 +5,7 @@
 #include <cmath>
 #include <mutex>
 #include "common/elf_info.h"
+#include "common/farpoint_title.h"
 #include "core/vr/stereo_layout.h"
 
 #include "common/logging/log.h"
@@ -83,7 +84,7 @@ s32 PS4_SYSV_ABI sceHmdReprojectionStartMultilayer(
     const OrbisHmdReprojectionTrackerState* tracker_state, s64 flip_arg, s32 option) {
     if (!layers || !tracker_state)
         return ORBIS_HMD_ERROR_PARAMETER_NULL;
-    if (Common::ElfInfo::Instance().GameSerial() != "CUSA04508" || layer_count != 1) {
+    if (!Common::IsFarpointSerial(Common::ElfInfo::Instance().GameSerial()) || layer_count != 1) {
         static bool reported = false;
         if (!reported) {
             LOG_ERROR(Lib_Hmd,
@@ -254,7 +255,7 @@ static s32 SubmitReprojection(const OrbisHmdReprojectionParam* param,
     std::memcpy(&frame.eye_textures[0], param->texture[0], sizeof(AmdGpu::Image));
     std::memcpy(&frame.eye_textures[1], param->texture[1], sizeof(AmdGpu::Image));
     auto left_uv = param->uv[0];
-    frame.packed_stereo = Common::ElfInfo::Instance().GameSerial() == "CUSA04508" &&
+    frame.packed_stereo = Common::IsFarpointSerial(Common::ElfInfo::Instance().GameSerial()) &&
                           frame.eye_textures[0].Address() == frame.eye_textures[1].Address() &&
                           frame.eye_textures[0].width > 0;
     if (frame.packed_stereo) {

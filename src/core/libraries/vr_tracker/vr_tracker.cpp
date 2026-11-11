@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "common/elf_info.h"
+#include "common/farpoint_title.h"
 #include "common/logging/log.h"
 
 #include "core/libraries/error_codes.h"
@@ -148,7 +149,7 @@ s32 PS4_SYSV_ABI sceVrTrackerInit(const OrbisVrTrackerInitParam* param) {
     if (!param)
         return ORBIS_VR_TRACKER_ERROR_ARGUMENT_INVALID;
     OrbisVrTrackerInitParam compatible{};
-    if (Common::ElfInfo::Instance().GameSerial() == "CUSA04508" && param->size == 144) {
+    if (Common::IsFarpointSerial(Common::ElfInfo::Instance().GameSerial()) && param->size == 144) {
         DecodeFarpointTrackerInit144(param, param->size, compatible);
         param = &compatible;
         LOG_INFO(Lib_VrTracker, "Using Farpoint's 144-byte tracker initialization ABI");

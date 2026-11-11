@@ -1,4 +1,10 @@
 param([Parameter(Mandatory=$true)][string]$GamePath)
+# SHA-256 of a file as upper-case hex, through .NET so it works even when Windows PowerShell inherits a
+# PowerShell 7 PSModulePath (then Get-FileHash cannot be found).
+function Get-Sha256Hex([string]$path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create(); $fs = [IO.File]::OpenRead($path)
+    try { ([BitConverter]::ToString($sha.ComputeHash($fs))).Replace('-', '') } finally { $fs.Dispose(); $sha.Dispose() }
+}
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
 $package=Join-Path $root 'Farpoint.pkg'
@@ -19,7 +25,9 @@ if (-not (Test-Path -LiteralPath $GamePath)) {
     }
     Move-Item -LiteralPath $staging -Destination $target
 }
-if ((Get-FileHash -LiteralPath $GamePath).Hash -ne '92A21FF9E309CE5DD58B058C4B12329463697BB27FDA98B5DA353E0A73BD9C0F') { throw 'Only Farpoint CUSA04508 version 1.00 is supported.' }
+# Farpoint 1.00 executables: CUSA04508 (EU, tested release) and CUSA04179 (US).
+$supportedHashes=@('92A21FF9E309CE5DD58B058C4B12329463697BB27FDA98B5DA353E0A73BD9C0F','A8B97FF32689E92E993FDFC944897791863D17928E64205A2C0379397375A712')
+if ((Get-Sha256Hex $GamePath) -notin $supportedHashes) { throw 'Only Farpoint version 1.00 (CUSA04508 EU or CUSA04179 US) is supported.' }
 & (Join-Path $PSScriptRoot 'initialize-metadata.ps1') -GamePath $GamePath -Package $package
 $profiles=Join-Path $PSScriptRoot 'resolution-profiles'
 $missing=@(960,1536,1920,2160,2400,2688,3072,3456,3840) | Where-Object { -not (Test-Path (Join-Path $profiles "eye-$_.pak")) }

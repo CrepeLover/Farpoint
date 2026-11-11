@@ -1015,9 +1015,21 @@ HmdFrames Presenter::PrepareHmdFrame(std::span<const AmdGpu::Image, 2> eye_textu
         return value != nullptr ? std::clamp(static_cast<float>(std::atof(value)), 0.0f, 1.0f)
                                 : 0.0f;
     }();
+    // SHADPS4_VR_MLAA=<0..1>: edges in the eyes' pictures smoothed on the way by morphological
+    // anti-aliasing at that strength (1 when left out; 0: not at all). Not the overlay over them.
+    static const float mlaa = [] {
+        const char* value = std::getenv("SHADPS4_VR_MLAA");
+        const float strength =
+            value != nullptr ? std::clamp(static_cast<float>(std::atof(value)), 0.0f, 1.0f)
+                             : 1.0f;
+        LOG_INFO(Render_Vulkan, "Headset pictures: MLAA {}",
+                 strength > 0.0f ? fmt::format("at strength {}", strength) : std::string{"off"});
+        return strength;
+    }();
     auto hmd_settings = pp_settings;
     hmd_settings.srgb_input = false;
     hmd_settings.sharpen = sharpen;
+    hmd_settings.mlaa = mlaa;
     if (frame != nullptr) {
         const auto bounds = Core::Vr::SpectatorContentRect(frame->width, frame->height,
                                                         desktop_aspect, crop);

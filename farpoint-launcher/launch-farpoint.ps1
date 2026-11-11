@@ -3,16 +3,25 @@
     [ValidateSet('Aim','Gamepad')][string]$Controller = 'Aim',
     [ValidateSet(0,30,60)][int]$MirrorFps = 30,
     [ValidateSet(960,1536,1920,2160,2400,2688,3072,3456,3840)][int]$EyeWidth = 1536,
-    [ValidateRange(60,120)][int]$FovPercent = 110,
+    [ValidateRange(60,120)][int]$FovPercent = 100,
     [switch]$NoGui,
     [switch]$ValidateOnly
 )
+# SHA-256 of a file as upper-case hex, through .NET so it works even when Windows PowerShell inherits a
+# PowerShell 7 PSModulePath (then Get-FileHash cannot be found).
+function Get-Sha256Hex([string]$path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create(); $fs = [IO.File]::OpenRead($path)
+    try { ([BitConverter]::ToString($sha.ComputeHash($fs))).Replace('-', '') } finally { $fs.Dispose(); $sha.Dispose() }
+}
 $ErrorActionPreference = 'Stop'
 $installRoot = Split-Path $PSScriptRoot -Parent
 $exe = Join-Path $PSScriptRoot 'shadps4.exe'
 $settingsFile = Join-Path $PSScriptRoot 'farpoint-settings.json'
 if (-not $GamePath) {
     $GamePath = Join-Path $installRoot 'games/CUSA04508/files/uroot/eboot.bin'
+    foreach ($candidate in @('games/CUSA04179/files/uroot/eboot.bin', 'games/CUSA04179/eboot.bin', 'games/CUSA04508/eboot.bin')) {
+        if (-not (Test-Path -LiteralPath $GamePath) -and (Test-Path -LiteralPath (Join-Path $installRoot $candidate))) { $GamePath = Join-Path $installRoot $candidate }
+    }
     if (Test-Path $settingsFile) {
         $saved = Get-Content $settingsFile -Raw | ConvertFrom-Json
         if ($saved.GamePath) { $GamePath = $saved.GamePath }
@@ -33,7 +42,7 @@ if (-not $NoGui -and -not $ValidateOnly) {
     $form.FormBorderStyle = 'FixedDialog'
     $form.MaximizeBox = $false
     $label = New-Object System.Windows.Forms.Label
-    $label.Text = 'Farpoint 1.00 (CUSA04508). Gameplay and weapon tracking need headset testing.'
+    $label.Text = 'Farpoint 1.00 (CUSA04508 EU or CUSA04179 US). Gameplay and weapon tracking need headset testing.'
     $label.SetBounds(18,16,585,38); $form.Controls.Add($label)
     $pathLabel = New-Object System.Windows.Forms.Label
     $pathLabel.Text = 'Extracted eboot.bin'; $pathLabel.SetBounds(18,60,560,20); $form.Controls.Add($pathLabel)
@@ -84,7 +93,7 @@ if (-not $NoGui -and -not $ValidateOnly) {
     $fovSlider.Add_ValueChanged({ $fovLabel.Text = "Rendered FOV: $($fovSlider.Value)%" })
     $form.Controls.Add($fovSlider)
     $fovHelp = New-Object System.Windows.Forms.Label
-    $fovHelp.Text = '60% (narrower)                 100% (original)                 120% (wider)'
+    $fovHelp.Text = '60% (narrower)                 100% (all the headset shows)                 120% (wider)'
     $fovHelp.SetBounds(18,321,580,20); $form.Controls.Add($fovHelp)
     $info = New-Object System.Windows.Forms.Label
     $info.Text = 'Connect the headset through your active OpenXR runtime before starting. Higher resolution uses the game''s stereo scaling. Choose Original for better performance. The mirror setting does not cap headset frames.'
@@ -105,9 +114,11 @@ if (-not (Test-Path -LiteralPath $exe)) { throw "Missing emulator: $exe" }
 $GamePath = (Resolve-Path -LiteralPath $GamePath).Path
 if ([IO.Path]::GetFileName($GamePath) -ne 'eboot.bin') { throw 'Select the extracted Farpoint eboot.bin.' }
 # Reject a different executable rather than applying the prototype ABI to another game/version.
-$expectedHash = '92A21FF9E309CE5DD58B058C4B12329463697BB27FDA98B5DA353E0A73BD9C0F'
-if ((Get-FileHash -LiteralPath $GamePath -Algorithm SHA256).Hash -ne $expectedHash) {
-    throw 'This build currently supports only the tested Farpoint CUSA04508 version 1.00 executable.'
+# Farpoint 1.00: CUSA04508 (EU, tested release) and CUSA04179 (US).
+$supportedHashes = @('92A21FF9E309CE5DD58B058C4B12329463697BB27FDA98B5DA353E0A73BD9C0F', 'A8B97FF32689E92E993FDFC944897791863D17928E64205A2C0379397375A712')
+$expectedHash = (Get-Sha256Hex $GamePath)
+if ($expectedHash -notin $supportedHashes) {
+    throw 'This build supports only the Farpoint version 1.00 executable (CUSA04508 EU or CUSA04179 US).'
 }
 # Local profiles contain the user's extracted game configuration and are not distributed
 # with the source. All retain the existing lighting workaround.
@@ -142,8 +153,14 @@ foreach ($name in @('connected_to_network', 'shad_net_enabled')) {
 $config | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $configPath -Encoding UTF8
 @{ GamePath=$GamePath; Controller=$Controller; MirrorFps=$MirrorFps; EyeWidth=$EyeWidth; FovPercent=$FovPercent } | ConvertTo-Json | Set-Content -LiteralPath $settingsFile -Encoding UTF8
 $env:SHADPS4_OPENXR = '1'; $env:SHADPS4_VR = '1'
-# Extra render margin during head movement; set 100 to restore the original FOV.
+# The game draws FovPercent of what the headset shows (its own view, asked as the game starts),
+# made symmetric (out = in, up = down) so that it covers all of a lopsided view like the Steam
+# Frame's (59/51/49/60 degrees out/in/up/down): a PlayStation VR's 100 by 103 degrees, even at
+# 110%, left black edges out to the sides and at the bottom, and Astro Bot (same emulator) culls
+# effects in one eye on a lopsided one. 100 = all the headset shows. (2026-11-01, local change.)
 $env:SHADPS4_VR_FOV = [string]$FovPercent
+$env:SHADPS4_VR_FOV_OF = 'headset'
+$env:SHADPS4_VR_FOV_SYMMETRIC = '1'
 $env:SHADPS4_XR_WAIT = '0'; $env:SHADPS4_XR_PAUSE = '0'
 $env:SHADPS4_XR_GAMEPAD_LAYOUT = '1'
 $env:SHADPS4_XR_SWAP_CIRCLE_R3 = '1'
@@ -171,7 +188,7 @@ $priorLog = Join-Path $logRoot 'shad_log.txt'
 if (Test-Path -LiteralPath $priorLog) {
     Copy-Item -LiteralPath $priorLog -Destination (Join-Path $logRoot "previous-$stamp.txt")
 }
-@{ Started=(Get-Date).ToString('o'); Executable=$exe; SHA256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash; GameSHA256=$expectedHash; EyeWidth=$EyeWidth; FovPercent=$FovPercent; MirrorFps=$MirrorFps; Controller=$Controller } | ConvertTo-Json | Set-Content (Join-Path $logRoot "session-$stamp.json") -Encoding UTF8
+@{ Started=(Get-Date).ToString('o'); Executable=$exe; SHA256=(Get-Sha256Hex $exe); GameSHA256=$expectedHash; EyeWidth=$EyeWidth; FovPercent=$FovPercent; MirrorFps=$MirrorFps; Controller=$Controller } | ConvertTo-Json | Set-Content (Join-Path $logRoot "session-$stamp.json") -Encoding UTF8
 $stdoutPath = Join-Path $logRoot "console-$stamp.stdout.txt"
 $stderrPath = Join-Path $logRoot "console-$stamp.stderr.txt"
 $process = Start-Process -FilePath $exe -WorkingDirectory $PSScriptRoot -ArgumentList @('-g',('"' + $GamePath + '"')) -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru

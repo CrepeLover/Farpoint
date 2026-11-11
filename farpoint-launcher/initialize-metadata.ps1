@@ -31,4 +31,4 @@ if (-not (Test-Path -LiteralPath $sfo)) {
 }
 if (-not (Test-Path -LiteralPath $sfo)) { throw 'The game package did not supply sce_sys/param.sfo.' }
 $details=@(& $tool sfo_listentries $sfo)
-if ($LASTEXITCODE -ne 0 -or -not ($details -match '^TITLE_ID .* = CUSA04508$') -or -not ($details -match '^APP_VER .* = 01\.00$')) { throw 'Game metadata must identify the supported Farpoint CUSA04508 version 1.00. Do not substitute metadata from another game or edition.' }
+if ($LASTEXITCODE -ne 0 -or -not ($details -match '^TITLE_ID .* = CUSA0(4508|4179)$') -or -not ($details -match '^APP_VER .* = 01\.00$')) { throw 'Game metadata must identify a supported Farpoint version 1.00 (CUSA04508 EU or CUSA04179 US). Do not substitute metadata from another game or edition.' }
