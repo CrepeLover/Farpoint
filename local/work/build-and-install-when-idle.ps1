@@ -5,7 +5,7 @@ param([string]$Note = 'Local build')
 $ErrorActionPreference = 'Stop'
 $work = 'C:\Games\farpoint-work'
 $installed = 'C:\Games\Farpoint\pc-vr\shadps4.exe'
-$built = 'C:\Games\Farpoint-src\build\win-us\shadps4.exe'
+$built = 'C:\Games\Farpoint-us\build\win-us\shadps4.exe'
 
 while (Get-Process shadps4 -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 15 }
 "build started $(Get-Date)"
